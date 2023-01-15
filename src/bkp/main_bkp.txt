@@ -1,0 +1,257 @@
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
+#include <ctype.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+
+
+#define INTERVAL 1000
+#define GETTIME 60000
+#define UPDATENTC 30000
+
+const char* host = "cantinhodoguerreiro";
+const char* ssid = "IFOZ_68eac0";
+const char* password = "wlan97153f";
+static unsigned int uTON, uTOFF;
+const int builtInLed = D0;
+ESP8266WebServer server(80);
+WiFiUDP ntpUDP;
+
+NTPClient timeClient(ntpUDP, "pool.ntp.org");
+
+
+void handleRoot();
+void handleNotFound();
+void handleLedOn();
+void handleLedOff();
+void handleTimer();
+//void IRAM_ATTR onTimerISR();
+void onTimerISR();
+void updateStatusByTimer();
+
+String scheduleDateAndTime();
+String mainTimer();
+String mainPage();
+
+
+void setup(void){
+
+  uTON = 0;
+  uTOFF = 0;
+
+  Serial.begin(9600, SERIAL_8N1);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  Serial.println("");
+
+  pinMode(builtInLed, OUTPUT);
+
+  // Wait for connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("");
+  Serial.print("Connected to ");
+  Serial.println(ssid);
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  if (MDNS.begin(host)) {
+    Serial.println("MDNS responder started");
+  }
+
+  { //Server routes and start region.
+
+  server.on("/", handleRoot);
+  server.on("/ledOn", handleLedOn);
+  server.on("/ledOff", handleLedOff);
+  server.on("/timer",handleTimer);
+  server.onNotFound(handleNotFound);
+  server.begin();
+
+  }
+
+  Serial.println("HTTP server started");
+
+  MDNS.addService("http", "tcp", 80);
+
+  //timer1_attachInterrupt(onTimerISR);
+  //timer1_enable(TIM_DIV16, TIM_EDGE, TIM_SINGLE);
+  //timer1_write(5000000); //1s
+
+  timeClient.begin();
+
+  timeClient.setTimeOffset(-3);
+}
+
+void loop(void){
+  static unsigned long lastMillisTon = 0;
+  static unsigned long lastMillisNTP = 0;
+  unsigned long currentMillis = millis();
+
+  server.handleClient();
+  MDNS.update();
+
+  if (currentMillis - lastMillisTon >= INTERVAL){
+  
+    lastMillisTon = currentMillis;
+
+    onTimerISR();
+
+  }
+
+  if (currentMillis - lastMillisNTP >= GETTIME){
+
+    lastMillisNTP = currentMillis;
+
+    scheduleDateAndTime();
+
+  }
+}
+
+void handleLedOn(){
+  uTON = 0;
+  uTOFF = 0;
+
+  server.sendHeader("Location", "/");
+  server.send(200, "text/html", mainPage());
+  digitalWrite(builtInLed, 1);
+}
+
+void handleLedOff(){
+  uTON = 0;
+  uTOFF = 0;
+
+  server.sendHeader("Location", "/");
+  server.send(200, "text/html", mainPage());
+  digitalWrite(builtInLed, 0);
+}
+
+void WebServer::handleRoot() {
+    String html = "<html><body>";
+    html += "<h2>Current state</h2>";
+    html += "<p>Manual</p>";
+    html += "</div>";
+    html += "<div>";
+    html += "  <h3>Manual Control</h2>";
+    html += "  <form method='get' action='manualTurnOn'>";
+    html += "    <input type='submit' value='Turn On'></form>";
+    html += "  <form method='get' action='manualTurnOff'>";
+    html += "    <input type='submit' value='Turn Off'></form>";
+    html += "</div>";
+
+    html += "<div>";
+    html += "  <h3>Timer Control</h2>";
+    html += "  <form method='get' action='startTimer'>";
+    html += "    <input type='submit' value='Start Timer'></form>";
+    html += "</div>";
+
+    html += "<div>";
+    html += "  <h3>Schedule Control</h2>";
+    html += "  <form method='get' action='schedulePeriod'>";
+    html += "    <input type='submit' value='Start Schedule'></form>";
+    html += "</div>";
+
+    html += "</body></html>";
+
+    _server.send(200, "text/html", html);
+}
+
+void handleTimer(){
+
+  if(server.argName(0) != "TON" || server.argName(1) != "TOFF"){
+    server.send(400,"text/html", "bad request");
+    return;
+  }
+
+  if(server.arg(0).isEmpty() || server.arg(1).isEmpty()){
+    server.send(400,"text/html", "bad request");
+    return;
+  }
+
+  if(!isDigit(server.arg(0).charAt(server.arg(0).length() - 1)) || !isDigit(server.arg(1).charAt(server.arg(1).length() - 1))){
+    server.send(400,"text/html", "bad request");
+    return;
+  }
+
+  uTON = server.arg(0).toInt();
+  uTOFF = server.arg(1).toInt();
+
+  server.send(200,"text/html",mainTimer());
+  digitalWrite(builtInLed,1);  
+}
+
+//void IRAM_ATTR onTimerISR(){
+  void onTimerISR(){
+
+    static unsigned int cTON = 0;
+    static unsigned int cTOFF = 0;
+
+    if(uTON == 0 || uTOFF == 0){
+      return;
+    }
+
+    if(cTON <= uTON && digitalRead(builtInLed)){
+      cTON++;
+    }
+    else if(digitalRead(builtInLed)){
+      cTON = 0;
+     digitalWrite(builtInLed, false);  
+    }
+
+    if(cTOFF <= uTOFF && !digitalRead(builtInLed)){
+      cTOFF++;
+    }
+    else if(!digitalRead(builtInLed)){
+      cTOFF = 0;
+      digitalWrite(builtInLed, true);  
+    }
+
+   // timer1_write(5000000);//1s
+}
+
+String mainPage(){
+  String wPage = "<!DOCTYPE html> <html>\n";
+
+  wPage += "<head><title>Controle da piscina</title></head>\n";
+  wPage += "<body><h1>Filtro modo manual</h1><section flex-directio: row>\n";
+  wPage += "<a href=\"/ledOn\"><button class = button button1> Liga </button></a>\n";
+  wPage += "<a href=\"/ledOff\"><button class = button button2> Desliga </button></a></section>\n";
+  wPage += "<h1>Configurar timer</h1>\n";
+  wPage += "<html><body><form action='/timer' method='POST'><br>";
+  wPage += "TON :<input type='text' name='TON' placeholder='tempo ligado'><br>";
+  wPage += "TOFF:<input type='text' name='TOFF' placeholder='intervalo'><br>";
+  wPage += "<input type='submit' name='SUBMIT' value='Enviar'></form> <br>";
+  wPage += "<a href=\"/\"><button class = button button2> Reconfigurar </button></a></section>\n";
+  wPage += "</body></html>";
+
+  return wPage;
+}
+
+String mainTimer(){
+  String wPage = "<!DOCTYPE html> <html>\n";
+
+  wPage += "<head><title>Controle da piscina</title></head>\n";
+  wPage += "<body><h1>Filtro modo manual</h1><section flex-directio: row>\n";
+  wPage += "<a href=\"/ledOn\"><button class = button button1> Liga </button></a>\n";
+  wPage += "<a href=\"/ledOff\"><button class = button button2> Desliga </button></a></section>\n";
+  wPage += "<h1>Configurar timer</h1>\n";
+
+  wPage += "<head><title>Controle da piscina</title></head>\n";
+  wPage += "<body><h1>Filtro</h1><section flex-directio: row>\n";
+  wPage += "<p> Timer configurado, tempo ligado: " + (String)uTON + "</p>\n";
+  wPage += "<p> Timer configurado, tempo desligado: " + (String)uTOFF + "</p>\n";
+
+  wPage += "</body></html>";
+
+  return wPage;
+}
+
+void handleNotFound(){
+  String message = "File Not Found";
+  server.send(404, "text/plain", message);
+}
