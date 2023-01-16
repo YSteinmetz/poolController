@@ -20,12 +20,18 @@ unsigned long currentMillis  = millis();
 unsigned long updateTime = currentMillis + UPDATENTC;
 
 void setup() {
- 
-  timeClient.begin();
-  timeClient.setTimeOffset(-3);
+
+  webServer.begin();
+  if(webServer.wifiStatus()){
+      timeClient.begin();
+      timeClient.setTimeOffset(-3);
+  }
+
   
 }
 void loop() {
+    if(webServer.wifiStatus()){
+
     webServer.handleClient();
     timeClient.update();
 
@@ -42,4 +48,13 @@ void loop() {
         }
         updateTime = currentMillis + UPDATENTC;
     }
+
+    }else{
+        Serial.println("Connection lost, trying to reconnect in 1 minute");
+        delay(60000);
+        webServer.begin();
+        timeClient.begin();
+        timeClient.setTimeOffset(-3);
+    }
+
 }
