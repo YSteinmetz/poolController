@@ -5,6 +5,7 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <./controllers/poolMotorController.h>
+#include <./routes/routes.h>
 
 class WebServer {
   public:
@@ -15,6 +16,7 @@ class WebServer {
   private:
     ESP8266WebServer _server;
     PoolMotorController &_motorController;
+    routes serverRoutes;
     bool _apMode = false;
     const char* _ssid;
     const char* _password;
@@ -29,7 +31,7 @@ class WebServer {
 };
 
 WebServer::WebServer(const char* host, const char* ssid, const char* password, int port, PoolMotorController &motorController)
-: _server(port), _motorController(motorController) {
+: _server(port), _motorController(motorController), serverRoutes(&_server) {
 
   _ssid = ssid;
   _password = password;
@@ -61,7 +63,8 @@ void WebServer::begin(){
     Serial.println("MDNS responder started");
   }
 
-  
+  serverRoutes.begin();
+
   Serial.println("HTTP server started");
 
   MDNS.addService("http", "tcp", 80);

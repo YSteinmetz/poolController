@@ -61,13 +61,6 @@ void WebServer::begin(){
     Serial.println("MDNS responder started");
   }
 
-  _server.on("/", std::bind(&WebServer::handleRoot, this));
-  _server.on("/manualTurnOn", std::bind(&WebServer::handleManualTurnOn, this));
-  _server.on("/manualTurnOff", std::bind(&WebServer::handleManualTurnOff, this));
-  _server.on("/startTimer", std::bind(&WebServer::handleStartTimer, this));
-  _server.on("/schedulePeriod", std::bind(&WebServer::handleSchedulePeriod, this));
-  _server.onNotFound(std::bind(&WebServer::handleNotFound, this));
-
   
   Serial.println("HTTP server started");
 
