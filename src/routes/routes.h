@@ -18,9 +18,7 @@ class routes{
         void handleStartTimer();
         void handleSchedulePeriod();
         void handleNotFound();
-        void createAP();
     
-
 };
 
 routes::routes(ESP8266WebServer *server, PoolMotorController &motorController)
@@ -38,7 +36,6 @@ void routes::begin(){
     _server->onNotFound(std::bind(&routes::handleNotFound, this));
 
 }
-
 
 void routes::handleManualTurnOn() {
 
@@ -75,7 +72,7 @@ void routes::handleStartTimer(){
   _motorController.setTimer(_server->arg(0).toInt(),_server->arg(1).toInt());
 
   _server->sendHeader("Location", "/");
-   _server->send(302); 
+  _server->send(302); 
 }
 
 void routes :: handleSchedulePeriod(){
@@ -105,6 +102,7 @@ void routes :: handleSchedulePeriod(){
         _server->send(400, "text/plain", "Bad Request: Bad parameter(s)");
         return;
     }
+
     int startHour = start.substring(0, 2).toInt();
     int startMinute = start.substring(3, 2).toInt();
     int startSecond = start.substring(6, 2).toInt();
@@ -125,28 +123,26 @@ void routes :: handleSchedulePeriod(){
 
  // success, redirect to the root page
     _server->sendHeader("Location", "/", true);
-    _server->send(303);
-
-
+    _server->send(302);
 }
 
 void routes :: handleNotFound(){
   _server->send(404, "text/plain", "Not found!");
 }
 
-
 void routes::handleRoot() {
     word machineState = _motorController.getModeActive();
 
     if (machineState == MODE_NOT_ALLOWED){
       _server->send(500, "text/plain","Error code: MODE_NOT_ALLOWED. Please reboot your device, if persists contact the manufacturer.");
+      return;
     }
 
     String html = "<html><body>";
     html += "<div>";
     html += "<h2>Current state</h2>";
 
-    switch (_motorController.getModeActive())
+    switch (machineState)
     {
     case MODE_MANUAL:
         html += "<p>Manual</p>";
@@ -187,7 +183,6 @@ void routes::handleRoot() {
 
     _server->send(200, "text/html", html);
 }
-
 
 
 #endif
