@@ -5,13 +5,14 @@
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
+#include "routes.h"
 
 class webServerController
 {
 private:
+
   ESP8266WebServer _server;
-  void handleRoot();
-  void handleNotFound();
+  routes _router;
   String _ssid;
   String _password;
 public:
@@ -22,7 +23,7 @@ public:
 };
 
 webServerController::webServerController(String ssid, String password, int port) :
-_server(port)
+_server(port), _router(&_server)
 {
   _ssid = ssid;
   _password = password;
@@ -52,26 +53,14 @@ void webServerController::begin(){
   if (MDNS.begin("esp8266")) {
     Serial.println("MDNS responder started");
   }
-
+  
   //Server routes and start region.
-  _server.on("/", std::bind(&webServerController::handleRoot, this));
-  _server.onNotFound(std::bind(&webServerController::handleNotFound, this));
-  _server.begin();
+
+  _router.begin();
 
   Serial.println("HTTP server started");
   MDNS.addService("http", "tcp", 80);
 
-}
-
-void webServerController::handleRoot() {
-  String html = "<h1>Hello from ESP8266!</h1>";
-  _server.send(200, "text/html", html);
-}
-
-
-void webServerController::handleNotFound() {
-  String html = "<h1>404 - Not Found</h1>";
-  _server.send(404, "text/html", html);
 }
 
 void webServerController::handleClient(){
