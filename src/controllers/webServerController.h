@@ -11,10 +11,11 @@ class webServerController
 {
 private:
 
-  ESP8266WebServer _server;
-  routes _router;
+  ESP8266WebServer server;
   String _ssid;
   String _password;
+  void handleRoot();
+  void handleNotFound();
 public:
   webServerController(String ssid, String password, int port);
   
@@ -23,19 +24,16 @@ public:
 };
 
 webServerController::webServerController(String ssid, String password, int port) :
-_server(port), _router(&_server)
-{
+server(port){
   _ssid = ssid;
   _password = password;
 }
 
 void webServerController::begin(){
 
-  Serial.begin(115200);
-
+  Serial.begin(9600);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(_ssid.c_str(), _password.c_str());
-
+  WiFi.begin(_ssid, _password);
   Serial.println("");
 
   // Wait for connection
@@ -43,7 +41,6 @@ void webServerController::begin(){
     delay(500);
     Serial.print(".");
   }
-
   Serial.println("");
   Serial.print("Connected to ");
   Serial.println(_ssid);
@@ -53,19 +50,40 @@ void webServerController::begin(){
   if (MDNS.begin("esp8266")) {
     Serial.println("MDNS responder started");
   }
-  
-  //Server routes and start region.
 
-  _router.begin();
+  server.on("/", std::bind(&webServerController::handleRoot, this));
+  server.onNotFound(std::bind(&webServerController::handleNotFound, this));
 
+  server.begin();
   Serial.println("HTTP server started");
-  MDNS.addService("http", "tcp", 80);
 
 }
 
 void webServerController::handleClient(){
-  _server.handleClient();
-  MDNS.update();
+  server.handleClient();
 }
 
+
+
+void webServerController::handleRoot() {
+  server.send(200, "text/plain", "hello from esp8266!");
+
+}
+
+void webServerController::handleNotFound(){
+
+  String message = "File Not Found\n\n";
+  message += "URI: ";
+  message += server.uri();
+  message += "\nMethod: ";
+  message += (server.method() == HTTP_GET)?"GET":"POST";
+  message += "\nArguments: ";
+  message += server.args();
+  message += "\n";
+  for (uint8_t i=0; i<server.args(); i++){
+    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+  }
+  server.send(404, "text/plain", message);
+
+}
 #endif // WEB_SERVER_H
